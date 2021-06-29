@@ -1,4 +1,7 @@
 .vscode
+game_db/*.json
+game_db/collections
+game_db/updateTime
 
 # source: https://github.com/github/gitignore
 # Byte-compiled / optimized / DLL files
