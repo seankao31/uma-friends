@@ -1,5 +1,0 @@
-uma_musume_game_db = 'uma_musume_game'
-raw_gamewith_uma_friends_db = 'raw_gamewith_uma_friends'
-raw_friends_collection = 'raw_friends'
-uma_friends_db = 'uma_friends'
-uma_friends_collection = 'friends'

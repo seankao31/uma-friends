@@ -1,8 +1,18 @@
 import time
-from pymongo import MongoClient
+
+from bs4 import BeautifulSoup
+from progress.bar import IncrementalBar
+from pymongo import DESCENDING, MongoClient
+from pymongo.errors import DuplicateKeyError
 from selenium import webdriver
 from selenium.common.exceptions import NoSuchElementException
-from . import dbnames
+
+
+uma_musume_game_db = 'uma_musume_game'
+raw_gamewith_uma_friends_db = 'raw_gamewith_uma_friends'
+raw_friends_collection = 'raw_friends'
+uma_friends_db = 'uma_friends'
+uma_friends_collection = 'friends'
 
 
 url = "https://gamewith.jp/uma-musume/article/show/260740"
@@ -20,10 +30,10 @@ def get_friends_list(friends_section):
     return friends
 
 
-def scrape(tmp='scraped'):
+def scrape_raw():
     with MongoClient() as mongo_client:
-        db = mongo_client[dbnames.raw_gamewith_uma_friends_db]
-        raw_friends = db[dbnames.raw_friends_collection]
+        db = mongo_client[raw_gamewith_uma_friends_db]
+        raw_friends = db[raw_friends_collection]
 
         try:
             chrome_op = webdriver.ChromeOptions()
@@ -107,9 +117,7 @@ def scrape(tmp='scraped'):
             # be loaded to the page.
             print(friends_section.find_element_by_class_name('-r-uma-musume-friends__results').text)
 
-            print(f'Writing to file: {tmp}')
-            with open(tmp, 'w', encoding='utf8') as f:
-                f.write(friends_section.get_attribute('innerHTML'))
+            content = friends_section.get_attribute('innerHTML')
 
         except Exception as e:
             # To avoid premature exits leaving zombie processes
@@ -118,6 +126,83 @@ def scrape(tmp='scraped'):
 
         driver.quit()
 
+    return content
+
+
+def parse_and_write(page_html):
+    with MongoClient() as mongo_client:
+        db = mongo_client[raw_gamewith_uma_friends_db]
+        raw_friends = db[raw_friends_collection]
+        raw_friends.create_index(
+            [('friend_code', DESCENDING), ('post_date', DESCENDING)],
+            unique=True
+        )
+
+        print('Parsing page html...')
+        page = BeautifulSoup(page_html, 'lxml')
+
+        friends = list(page.ul)
+        # Insert in the order they're uploaded to the website
+        friends.reverse()
+        n = len(friends)
+
+        print(f'Inserting into database {raw_gamewith_uma_friends_db}/{raw_friends_collection}')
+        duplicate_count = 0
+        progress_bar = IncrementalBar('Processing', max=n)
+        for friend in progress_bar.iter(friends):
+            support_id = None
+            support_wrap = friend.find_all(class_='-r-uma-musume-friends-list-item__support-wrap')
+            if support_wrap:
+                support_id = support_wrap[0].find_all('a')[0].get('href')
+                support_id = support_id.split('/')[-1]
+
+            support_limit = None
+            support_limit_wrap = friend.find_all(class_='-r-uma-musume-friends-list-item__limitNumber')
+            if support_limit_wrap:
+                support_limit = support_limit_wrap[0].text.strip()
+
+            trainer_id = None
+            trainer_id_wrap = friend.find_all(class_='-r-uma-musume-friends-list-item__trainerId__text')
+            if trainer_id_wrap:
+                trainer_id = trainer_id_wrap[0].text.strip()
+
+            main_uma_img = None
+            main_uma_wrap = friend.find_all(class_='-r-uma-musume-friends-list-item__mainUmaMusume-wrap')
+            if main_uma_wrap:
+                main_uma_img = main_uma_wrap[0].img.get('src').strip()
+
+            factors = None
+            factors_item = friend.find_all(class_='-r-uma-musume-friends-list-item__factor-list__item')
+            if factors_item:
+                factors = [factor.text.strip() for factor in factors_item]
+
+            comment = None
+            comment_wrap = friend.find_all(class_='-r-uma-musume-friends-list-item__comment')
+            if comment_wrap:
+                comment = comment_wrap[0].text.strip()
+
+            post_date = None
+            post_date_wrap = friend.find_all(class_='-r-uma-musume-friends-list-item__postDate')
+            if post_date_wrap:
+                post_date = post_date_wrap[0].text.strip()
+
+            entry = {
+                'friend_code': trainer_id,
+                'support_id': support_id,
+                'support_limit': support_limit,
+                'character_image_url': main_uma_img,
+                'factors': factors,
+                'comment': comment,
+                'post_date': post_date
+            }
+            try:
+                raw_friends.insert_one(entry)
+            except DuplicateKeyError:
+                duplicate_count += 1
+                continue
+        num_new_records = n - duplicate_count
+        print(f'New records: {num_new_records}')
+
 
 if __name__ == '__main__':
-    scrape()
+    parse_and_write(scrape_raw())
