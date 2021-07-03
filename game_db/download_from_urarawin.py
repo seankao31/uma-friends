@@ -21,6 +21,8 @@ print()
 print('====== Start of commands ======')
 print()
 
+uma_musume_game_db = 'uma_musume_game'
+
 for k, v in db.items():
     if not isinstance(v, list) and not isinstance(v, dict):
         with open(k, 'w', encoding='utf8') as f:
@@ -30,7 +32,7 @@ for k, v in db.items():
     file_name = f'{k}.json'
     with open(f'{dir}/{file_name}', 'w', encoding='utf8') as ff:
         json.dump(v, ff, ensure_ascii=False)
-        command = f'mongoimport --db uma_musume_game --drop --file {dir}/{file_name}'
+        command = f'mongoimport --db {uma_musume_game_db} --drop --file {dir}/{file_name}'
         if isinstance(v, list):
             command += ' --jsonArray'
         print(command)

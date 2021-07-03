@@ -13,9 +13,11 @@ googleapis-common-protos==1.53.0
 httplib2==0.19.1
 idna==2.10
 iniconfig==1.1.1
+lxml==4.6.3
 mccabe==0.6.1
 packaging==20.9
 pluggy==0.13.1
+progress==1.5
 protobuf==3.17.3
 py==1.10.0
 pyasn1==0.4.8
