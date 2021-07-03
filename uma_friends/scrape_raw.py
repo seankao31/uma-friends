@@ -2,11 +2,10 @@ import time
 from pymongo import MongoClient
 from selenium import webdriver
 from selenium.common.exceptions import NoSuchElementException
+from . import dbnames
 
 
 url = "https://gamewith.jp/uma-musume/article/show/260740"
-db_name = 'raw_gamewith_uma_friends'
-collection_name = 'raw_friends'
 BUTTON_LIMIT = 200
 
 
@@ -23,8 +22,8 @@ def get_friends_list(friends_section):
 
 def scrape(tmp='scraped'):
     with MongoClient() as mongo_client:
-        db = mongo_client[db_name]
-        raw_friends = db[collection_name]
+        db = mongo_client[dbnames.raw_gamewith_uma_friends_db]
+        raw_friends = db[dbnames.raw_friends_collection]
 
         try:
             chrome_op = webdriver.ChromeOptions()

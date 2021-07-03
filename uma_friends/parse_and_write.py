@@ -1,10 +1,7 @@
 from bs4 import BeautifulSoup
 from pymongo import MongoClient, DESCENDING
 from pymongo.errors import DuplicateKeyError
-
-
-db_name = 'raw_gamewith_uma_friends'
-collection_name = 'raw_friends'
+from . import dbnames
 
 
 # Print iterations progress
@@ -32,8 +29,8 @@ def print_progress_bar(iteration, total, prefix='', suffix='', decimals=1, lengt
 
 def parse_and_write(tmp='scraped'):
     with MongoClient() as mongo_client:
-        db = mongo_client[db_name]
-        raw_friends = db[collection_name]
+        db = mongo_client[dbnames.raw_gamewith_uma_friends_db]
+        raw_friends = db[dbnames.raw_friends_collection]
         raw_friends.create_index(
             [('friend_code', DESCENDING), ('post_date', DESCENDING)],
             unique=True
@@ -50,7 +47,7 @@ def parse_and_write(tmp='scraped'):
             friends.reverse()
             n = len(friends)
 
-            print(f'Inserting into database {db_name}/{collection_name}')
+            print(f'Inserting into database {dbnames.raw_gamewith_uma_friends_db}/{dbnames.raw_friends_collection}')
             if n != 0:
                 print_progress_bar(0, n, prefix='Progress:', suffix='Complete', length=50)
             duplicate_count = 0
