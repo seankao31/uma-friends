@@ -3,9 +3,8 @@ import os
 import time
 
 from bs4 import BeautifulSoup
-from progress.bar import IncrementalBar
 from pymongo import DESCENDING, MongoClient
-from pymongo.errors import DuplicateKeyError
+from pymongo.errors import BulkWriteError, DuplicateKeyError
 from selenium import webdriver
 from selenium.common.exceptions import NoSuchElementException
 
@@ -14,6 +13,9 @@ env = 'TEST'
 # env = 'PROD
 config = configparser.ConfigParser()
 config.read(os.path.abspath(os.path.join(".ini")))
+
+# Sadly it seems that there's no other way other than using magic number
+DUPLICATE_KEY_ERROR_CODE = 11000
 
 # game data
 UMA_MUSUME_GAME_DB = 'uma_musume_game'
@@ -175,16 +177,14 @@ def parse_page(page_html):
     page = BeautifulSoup(page_html, 'lxml')
 
     friends = list(page.ul)
-    # Reverse to insert in the order they're uploaded to the website
-    friends.reverse()
     return friends
 
 
 def get_friends(friends_page_list):
-    '''Generator that yields entries. Each entry is a dict that contains friend information we need.'''
+    '''Return list of friends, each entry is a dict that contains friend information we need.'''
 
-    progress_bar = IncrementalBar('Processing', max=len(friends_page_list))
-    for friend in progress_bar.iter(friends_page_list):
+    friends = []
+    for friend in friends_page_list:
         support_id = None
         support_wrap = friend.find_all(class_='-r-uma-musume-friends-list-item__support-wrap')
         if support_wrap:
@@ -231,7 +231,9 @@ def get_friends(friends_page_list):
             'post_date': post_date
         }
 
-        yield entry
+        friends.append(entry)
+
+    return friends
 
 
 if __name__ == '__main__':
@@ -249,11 +251,18 @@ if __name__ == '__main__':
     )
 
     print(f'Inserting into database {UMAFRIENDS_DB}/{RAW_GAMEWITH_FRIENDS_NS}')
-    duplicate_count = 0
+    friends_to_insert = []
     for friend in friends:
-        try:
-            raw_friends.insert_one(friend)
-        except DuplicateKeyError:
-            duplicate_count += 1
-    num_new_records = n_friends - duplicate_count
-    print(f'New records: {num_new_records}')
+        friends_to_insert.append(friend)
+
+    try:
+        insert_result = raw_friends.insert_many(friends_to_insert, ordered=False)
+    except BulkWriteError as e:
+        panic_list = list(filter(lambda x: x['code'] != DUPLICATE_KEY_ERROR_CODE,
+                                 e.details['writeErrors']))
+        e.details['writeErrors'] = panic_list
+        print(f'New records: {e.details["nInserted"]}')
+        if panic_list:
+            raise e
+    else:
+        print(f'New records: {insert_result["nInserted"]}')
