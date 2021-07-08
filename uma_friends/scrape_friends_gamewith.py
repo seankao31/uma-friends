@@ -1,3 +1,5 @@
+import configparser
+import os
 import time
 
 from bs4 import BeautifulSoup
@@ -8,12 +10,18 @@ from selenium import webdriver
 from selenium.common.exceptions import NoSuchElementException
 
 
+env = 'TEST'
+# env = 'PROD
+config = configparser.ConfigParser()
+config.read(os.path.abspath(os.path.join(".ini")))
+
 # game data
 UMA_MUSUME_GAME_DB = 'uma_musume_game'
 
 # friend raw data scraped from gamewith
-RAW_GAMEWITH_UMA_FRIENDS_DB = 'raw_gamewith_uma_friends'
-RAW_FRIENDS_COLLECTION = 'raw_friends'
+UMAFRIENDS_DB_URI = config[env]['UMAFRIENDS_DB_URI']
+UMAFRIENDS_DB = config[env]['UMAFRIENDS_DB']
+RAW_GAMEWITH_FRIENDS_NS = config[env]['RAW_GAMEWITH_FRIENDS_NS']
 
 # cleaned up friend data
 UMA_FRIENDS_DB = 'uma_friends'
@@ -91,9 +99,9 @@ def click_more_friends_button(driver, friends_section):
 def scrape_raw(url):
     '''Scrapes url and returns raw friend list html.'''
 
-    with MongoClient() as mongo_client:
-        db = mongo_client[RAW_GAMEWITH_UMA_FRIENDS_DB]
-        raw_friends = db[RAW_FRIENDS_COLLECTION]
+    with MongoClient(UMAFRIENDS_DB_URI) as mongo_client:
+        db = mongo_client[UMAFRIENDS_DB]
+        raw_friends = db[RAW_GAMEWITH_FRIENDS_NS]
 
         try:
             chrome_op = webdriver.ChromeOptions()
@@ -232,15 +240,15 @@ if __name__ == '__main__':
     n_friends = len(parsed_list)
     friends = get_friends(friends_page_list=parsed_list)
 
-    mongo_client = MongoClient()
-    raw_db = mongo_client[RAW_GAMEWITH_UMA_FRIENDS_DB]
-    raw_friends = raw_db[RAW_FRIENDS_COLLECTION]
+    mongo_client = MongoClient(UMAFRIENDS_DB_URI)
+    raw_db = mongo_client[UMAFRIENDS_DB]
+    raw_friends = raw_db[RAW_GAMEWITH_FRIENDS_NS]
     raw_friends.create_index(
         [('friend_code', DESCENDING), ('post_date', DESCENDING)],
         unique=True
     )
 
-    print(f'Inserting into database {RAW_GAMEWITH_UMA_FRIENDS_DB}/{RAW_FRIENDS_COLLECTION}')
+    print(f'Inserting into database {UMAFRIENDS_DB}/{RAW_GAMEWITH_FRIENDS_NS}')
     duplicate_count = 0
     for friend in friends:
         try:
