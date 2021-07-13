@@ -1,0 +1,1 @@
+worker: python scrape_friends_gamewith.py
