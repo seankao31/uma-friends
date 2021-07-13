@@ -14,9 +14,12 @@ from selenium.common.exceptions import NoSuchElementException
 def get_logger():
     logger = logging.getLogger('scrape_friends_gamewith')
     logger.setLevel(logging.DEBUG)
-    formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
     console_handler = logging.StreamHandler()
     console_handler.setLevel(logging.DEBUG)
+    if 'ON_HEROKU' in os.environ:
+        formatter = logging.Formatter('%(levelname)s [%(name)s.%(funcName)s:%(lineno)d] %(message)s')
+    else:
+        formatter = logging.Formatter('%(asctime)s %(levelname)s [%(name)s.%(funcName)s:%(lineno)d] %(message)s')
     console_handler.setFormatter(formatter)
     logger.addHandler(console_handler)
 
