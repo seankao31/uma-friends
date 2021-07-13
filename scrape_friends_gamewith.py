@@ -138,6 +138,7 @@ def scrape_raw(url, timeout=100):
                 chrome_op.binary_location = GOOGLE_CHROME_BIN
             chrome_op.add_argument('--headless')
             chrome_op.add_argument('--no-sandbox')
+            chrome_op.add_argument('--disable-dev-shm-usage')
             chrome_op.add_argument('--remote-debugging-port=9222')
             driver = webdriver.Chrome(executable_path=CHROMEDRIVER_PATH, options=chrome_op)
             driver.get(url)
