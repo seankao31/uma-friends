@@ -1,3 +1,5 @@
+from datetime import datetime, timezone
+import hashlib
 import json
 import logging
 import os
@@ -5,7 +7,7 @@ import re
 import time
 
 from bs4 import BeautifulSoup
-from pymongo import DESCENDING, MongoClient
+from pymongo import ASCENDING, MongoClient
 from pymongo.errors import BulkWriteError
 from selenium import webdriver
 from selenium.common.exceptions import NoSuchElementException
@@ -55,6 +57,34 @@ def message_with_json(msg, json_object):
     return msg + ' ' + json.dumps(json_object, ensure_ascii=False)
 
 
+def get_utc_datetime(scraped_date_string):
+    # get now time
+    now_date_local = datetime.now()
+    now_year_local = now_date_local.year
+
+    # convert to datetime
+    post_date_local = datetime.strptime(scraped_date_string, '%m/%d %H:%M')
+    # add year info
+    post_date_local = post_date_local.replace(year=now_year_local)
+    if post_date_local > now_date_local:
+        # year has changed
+        post_date_local = post_date_local.replace(year=now_year_local - 1)
+
+    post_date_utc = post_date_local.astimezone(tz=timezone.utc)
+    post_date_utc_string = post_date_utc.strftime('%Y/%m/%d %H:%M')
+    return post_date_utc_string
+
+
+def hash_object(object):
+    # https://stackoverflow.com/questions/5884066/hashing-a-dictionary/22003440#22003440
+    object_str = json.dumps(object,
+                            sort_keys=True,
+                            separators=(',', ':'),
+                            ensure_ascii=True,
+                            indent=None)
+    return hashlib.sha1(object_str.encode('utf-8')).hexdigest()
+
+
 def get_friends_list(friends_section):
     '''Returns the list of friends presented in friends_section.'''
 
@@ -96,6 +126,7 @@ def is_friend_in_db(friend, collection):
     post_date = (friend
                  .find_element_by_class_name('-r-uma-musume-friends-list-item__postDate')
                  .text)
+    post_date = get_utc_datetime(post_date)
     if collection.count_documents({'friend_code': trainer_id, 'post_date': post_date}) != 0:
         message = message_with_json('Found duplicate record on page.',
                                     {'friend_code': trainer_id, 'post_date': post_date})
@@ -270,6 +301,7 @@ def get_friends(friends_page_list):
         post_date_wrap = friend.find_all(class_='-r-uma-musume-friends-list-item__postDate')
         if post_date_wrap:
             post_date = post_date_wrap[0].text.strip()
+            post_date = get_utc_datetime(post_date)
 
         entry = {
             'friend_code': trainer_id,
@@ -278,8 +310,10 @@ def get_friends(friends_page_list):
             'character_image_url': main_uma_img,
             'factors': factors,
             'comment': comment,
-            'post_date': post_date
         }
+        hash_digest = hash_object(entry)
+        entry['post_date'] = post_date
+        entry['hash_digest'] = hash_digest
 
         friends.append(entry)
 
@@ -296,7 +330,7 @@ if __name__ == '__main__':
     raw_db = mongo_client[UMAFRIENDS_DB]
     raw_friends = raw_db[RAW_GAMEWITH_FRIENDS_NS]
     raw_friends.create_index(
-        [('friend_code', DESCENDING), ('post_date', DESCENDING)],
+        [('friend_code', ASCENDING), ('hash_digest', ASCENDING)],
         unique=True
     )
 
