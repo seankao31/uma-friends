@@ -25,6 +25,9 @@ def get_logger():
 
 logger = get_logger()
 
+GOOGLE_CHROME_BIN = os.environ['GOOGLE_CHROME_BIN']
+CHROMEDRIVER_PATH = os.environ['CHROMEDRIVER_PATH']
+
 # Sadly it seems that there's no other way other than using magic number
 DUPLICATE_KEY_ERROR_CODE = 11000
 BUTTON_LIMIT = int(os.environ['BUTTON_LIMIT'])
@@ -134,8 +137,14 @@ def scrape_raw(url, timeout=100):
 
         try:
             chrome_op = webdriver.ChromeOptions()
-            chrome_op.add_argument('headless')
-            driver = webdriver.Chrome(options=chrome_op)
+            try:
+                chrome_op.binary_location = os.environ['GOOGLE_CHROME_SHIM']
+            except KeyError:
+                chrome_op.binary_location = GOOGLE_CHROME_BIN
+            chrome_op.add_argument('--headless')
+            chrome_op.add_argument('--no-sandbox')
+            chrome_op.add_argument('--remote-debugging-port=9222')
+            driver = webdriver.Chrome(executable_path=CHROMEDRIVER_PATH, options=chrome_op)
             driver.get(url)
             logger.info(message_with_json('Connected to page.', {'url': url}))
 
@@ -201,8 +210,12 @@ def scrape_raw(url, timeout=100):
 
         except Exception as e:
             # To avoid premature exits leaving zombie processes
-            driver.quit()
-            logger.exception()
+            try:
+                driver.quit()
+            except UnboundLocalError:
+                # exception raised even before driver is defined
+                pass
+            logger.exception(e)
             # We don't really deal with the exception though, hence raising it
             raise e
 
