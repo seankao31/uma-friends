@@ -1,4 +1,3 @@
-import configparser
 import json
 import logging
 import os
@@ -10,12 +9,6 @@ from pymongo import DESCENDING, MongoClient
 from pymongo.errors import BulkWriteError
 from selenium import webdriver
 from selenium.common.exceptions import NoSuchElementException
-
-
-env = 'PROD'
-# PROD or TEST
-config = configparser.ConfigParser()
-config.read(os.path.abspath(os.path.join(".ini")))
 
 
 def get_logger():
@@ -34,15 +27,15 @@ logger = get_logger()
 
 # Sadly it seems that there's no other way other than using magic number
 DUPLICATE_KEY_ERROR_CODE = 11000
-BUTTON_LIMIT = int(config[env]['BUTTON_LIMIT'])
+BUTTON_LIMIT = int(os.environ['BUTTON_LIMIT'])
 
 # game data
 UMA_MUSUME_GAME_DB = 'uma_musume_game'
 
 # friend raw data scraped from gamewith
-UMAFRIENDS_DB_URI = config[env]['UMAFRIENDS_DB_URI']
-UMAFRIENDS_DB = config[env]['UMAFRIENDS_DB']
-RAW_GAMEWITH_FRIENDS_NS = config[env]['RAW_GAMEWITH_FRIENDS_NS']
+UMAFRIENDS_DB_URI = os.environ['UMAFRIENDS_DB_URI']
+UMAFRIENDS_DB = os.environ['UMAFRIENDS_DB']
+RAW_GAMEWITH_FRIENDS_NS = os.environ['RAW_GAMEWITH_FRIENDS_NS']
 
 # remove username and password for logging
 pattern = '(//).*:.*@'
@@ -53,7 +46,7 @@ UMA_FRIENDS_DB = 'uma_friends'
 UMA_FRIENDS_COLLECTION = 'friends'
 
 
-GAMEWITH_FRIENDS_URL = config['URL']['GAMEWITH_FRIENDS_URL']
+GAMEWITH_FRIENDS_URL = os.environ['GAMEWITH_FRIENDS_URL']
 
 
 class PageError(Exception):
