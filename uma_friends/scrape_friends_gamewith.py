@@ -2,6 +2,7 @@ import configparser
 import json
 import logging
 import os
+import re
 import time
 
 from bs4 import BeautifulSoup
@@ -42,6 +43,10 @@ UMA_MUSUME_GAME_DB = 'uma_musume_game'
 UMAFRIENDS_DB_URI = config[env]['UMAFRIENDS_DB_URI']
 UMAFRIENDS_DB = config[env]['UMAFRIENDS_DB']
 RAW_GAMEWITH_FRIENDS_NS = config[env]['RAW_GAMEWITH_FRIENDS_NS']
+
+# remove username and password for logging
+pattern = '(//).*:.*@'
+CENSORED_UMAFRIENDS_DB_URI = ''.join(re.split(pattern, UMAFRIENDS_DB_URI))
 
 # cleaned up friend data
 UMA_FRIENDS_DB = 'uma_friends'
@@ -294,7 +299,7 @@ if __name__ == '__main__':
     )
 
     message = message_with_json('Insert into database.',
-                                {'uri': UMAFRIENDS_DB_URI, 'database': UMAFRIENDS_DB, 'collection': RAW_GAMEWITH_FRIENDS_NS})
+                                {'uri': CENSORED_UMAFRIENDS_DB_URI, 'database': UMAFRIENDS_DB, 'collection': RAW_GAMEWITH_FRIENDS_NS})
     logger.info(message)
     try:
         insert_result = raw_friends.insert_many(friends, ordered=False)
