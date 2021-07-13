@@ -35,9 +35,6 @@ CHROMEDRIVER_PATH = os.environ['CHROMEDRIVER_PATH']
 DUPLICATE_KEY_ERROR_CODE = 11000
 BUTTON_LIMIT = int(os.environ['BUTTON_LIMIT'])
 
-# game data
-UMA_MUSUME_GAME_DB = 'uma_musume_game'
-
 # friend raw data scraped from gamewith
 UMAFRIENDS_DB_URI = os.environ['UMAFRIENDS_DB_URI']
 UMAFRIENDS_DB = os.environ['UMAFRIENDS_DB']
@@ -46,11 +43,6 @@ RAW_GAMEWITH_FRIENDS_NS = os.environ['RAW_GAMEWITH_FRIENDS_NS']
 # remove username and password for logging
 pattern = '(//).*:.*@'
 CENSORED_UMAFRIENDS_DB_URI = ''.join(re.split(pattern, UMAFRIENDS_DB_URI))
-
-# cleaned up friend data
-UMA_FRIENDS_DB = 'uma_friends'
-UMA_FRIENDS_COLLECTION = 'friends'
-
 
 GAMEWITH_FRIENDS_URL = os.environ['GAMEWITH_FRIENDS_URL']
 
