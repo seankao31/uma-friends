@@ -11,7 +11,7 @@ from selenium import webdriver
 from selenium.common.exceptions import NoSuchElementException
 
 
-env = 'TEST'
+env = 'PROD'
 # PROD or TEST
 config = configparser.ConfigParser()
 config.read(os.path.abspath(os.path.join(".ini")))
@@ -33,7 +33,7 @@ logger = get_logger()
 
 # Sadly it seems that there's no other way other than using magic number
 DUPLICATE_KEY_ERROR_CODE = 11000
-BUTTON_LIMIT = config[env]['BUTTON_LIMIT']
+BUTTON_LIMIT = int(config[env]['BUTTON_LIMIT'])
 
 # game data
 UMA_MUSUME_GAME_DB = 'uma_musume_game'
@@ -147,6 +147,7 @@ def scrape_raw(url, timeout=100):
             # Repeatly click "もっと見る" button until conditions met.
             # Each time the page loads 200 more records.
             button_click_count = 0
+            logger.info(message_with_json('Start clicking button.', {'limit': BUTTON_LIMIT}))
             while True:
                 # 1) Limit reached
                 # Page crashes if it's too huge (~40000 records i.e. 200 clicks)
@@ -171,15 +172,15 @@ def scrape_raw(url, timeout=100):
                 is_button_clicked = click_more_friends_button(driver, friends_section)
                 if is_button_clicked:
                     button_click_count += 1
-                    logger.info('Clicked button. {\'button\': もっと見る}')
+                    logger.info(message_with_json('Clicked button.', {'button': 'もっと見る', 'count': button_click_count}))
                     # Avoid rapid clicking
                     time.sleep(2)
                 else:
                     # 3) Can't find "もっと見る" button
-                    logger.info('Button not found. {\'button\': もっと見る}')
+                    logger.info(message_with_json('Button not found.', {'button': 'もっと見る'}))
                     break
 
-            logger.info('Stopped clicking button. {\'button\': もっと見る}')
+            logger.info(message_with_json('Stopped clicking button.', {'button': 'もっと見る'}))
 
             timeout_counter = 0
             while timeout_counter < timeout:
