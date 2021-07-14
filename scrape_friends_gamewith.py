@@ -18,10 +18,7 @@ def get_logger():
     logger.setLevel(logging.DEBUG)
     console_handler = logging.StreamHandler()
     console_handler.setLevel(logging.DEBUG)
-    if 'ON_HEROKU' in os.environ:
-        formatter = logging.Formatter('%(levelname)s [%(name)s.%(funcName)s:%(lineno)d] %(message)s')
-    else:
-        formatter = logging.Formatter('%(asctime)s %(levelname)s [%(name)s.%(funcName)s:%(lineno)d] %(message)s')
+    formatter = logging.Formatter('%(levelname)s [%(name)s.%(funcName)s:%(lineno)d] %(message)s')
     console_handler.setFormatter(formatter)
     logger.addHandler(console_handler)
 
