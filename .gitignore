@@ -3,8 +3,7 @@ game_db/*.json
 game_db/collections
 game_db/updateTime
 .ini
-.env
-.env.test
+.env.*
 
 # source: https://github.com/github/gitignore
 # Byte-compiled / optimized / DLL files

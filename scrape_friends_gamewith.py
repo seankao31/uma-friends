@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 import hashlib
 import json
 import logging
@@ -71,8 +71,7 @@ def get_utc_datetime(scraped_date_string):
         post_date_local = post_date_local.replace(year=now_year_local - 1)
 
     post_date_utc = post_date_local.astimezone(tz=timezone.utc)
-    post_date_utc_string = post_date_utc.strftime('%Y/%m/%d %H:%M')
-    return post_date_utc_string
+    return post_date_utc
 
 
 def hash_object(object):
@@ -120,20 +119,20 @@ def get_friends_section(driver, timeout=30):
 def is_friend_in_db(friend, collection):
     '''Returns whether friend is already in collection.'''
 
-    trainer_id = (friend
-                  .find_element_by_class_name('-r-uma-musume-friends-list-item__trainerId__text')
-                  .text)
-    post_date = (friend
-                 .find_element_by_class_name('-r-uma-musume-friends-list-item__postDate')
-                 .text)
-    post_date = get_utc_datetime(post_date)
-    if collection.count_documents({'friend_code': trainer_id, 'post_date': post_date}) != 0:
-        message = message_with_json('Found duplicate record on page.',
-                                    {'friend_code': trainer_id, 'post_date': post_date})
-        logger.info(message)
-        return True
+    friend_html = friend.get_attribute('innerHTML')
+    parsed_friend = BeautifulSoup(friend_html, 'lxml')
+    entry = get_friend_data(parsed_friend)
+    hash_digest = entry['hash_digest']
+    post_date = entry['post_date']
+    query = {'hash_digest': hash_digest, 'post_date': post_date}
+    matched_document = collection.find_one(query)
+    if matched_document is None:
+        return False
 
-    return False
+    message = message_with_json('Found duplicate record on page.',
+                                {'hash_digest': hash_digest, 'post_date': str(post_date)})
+    logger.info(message)
+    return True
 
 
 def click_more_friends_button(driver, friends_section, timeout=20):
@@ -157,7 +156,7 @@ def click_more_friends_button(driver, friends_section, timeout=20):
 def scrape_raw(url, timeout=100):
     '''Scrapes url and returns raw friend list html.'''
 
-    with MongoClient(UMAFRIENDS_DB_URI) as mongo_client:
+    with MongoClient(UMAFRIENDS_DB_URI, tz_aware=True) as mongo_client:
         db = mongo_client[UMAFRIENDS_DB]
         raw_friends = db[RAW_GAMEWITH_FRIENDS_NS]
 
@@ -261,60 +260,64 @@ def parse_page(page_html):
     return friends
 
 
+def get_friend_data(friend):
+    support_id = None
+    support_wrap = friend.find_all(class_='-r-uma-musume-friends-list-item__support-wrap')
+    if support_wrap:
+        support_id = support_wrap[0].find_all('a')[0].get('href')
+        support_id = support_id.split('/')[-1]
+
+    support_limit = None
+    support_limit_wrap = friend.find_all(class_='-r-uma-musume-friends-list-item__limitNumber')
+    if support_limit_wrap:
+        support_limit = support_limit_wrap[0].text.strip()
+
+    trainer_id = None
+    trainer_id_wrap = friend.find_all(class_='-r-uma-musume-friends-list-item__trainerId__text')
+    if trainer_id_wrap:
+        trainer_id = trainer_id_wrap[0].text.strip()
+
+    main_uma_img = None
+    main_uma_wrap = friend.find_all(class_='-r-uma-musume-friends-list-item__mainUmaMusume-wrap')
+    if main_uma_wrap:
+        main_uma_img = main_uma_wrap[0].img.get('src').strip()
+
+    factors = None
+    factors_item = friend.find_all(class_='-r-uma-musume-friends-list-item__factor-list__item')
+    if factors_item:
+        factors = [factor.text.strip() for factor in factors_item]
+
+    comment = None
+    comment_wrap = friend.find_all(class_='-r-uma-musume-friends-list-item__comment')
+    if comment_wrap:
+        comment = comment_wrap[0].text.strip()
+
+    post_date = None
+    post_date_wrap = friend.find_all(class_='-r-uma-musume-friends-list-item__postDate')
+    if post_date_wrap:
+        post_date = post_date_wrap[0].text.strip()
+        post_date = get_utc_datetime(post_date)
+
+    entry = {
+        'friend_code': trainer_id,
+        'support_id': support_id,
+        'support_limit': support_limit,
+        'character_image_url': main_uma_img,
+        'factors': factors,
+        'comment': comment,
+    }
+    hash_digest = hash_object(entry)
+    entry['post_date'] = post_date
+    entry['hash_digest'] = hash_digest
+    return entry
+
+
 def get_friends(friends_page_list):
     '''Return list of friends, each entry is a dict that contains friend information we need.'''
 
     friends = []
-    for friend in friends_page_list:
-        support_id = None
-        support_wrap = friend.find_all(class_='-r-uma-musume-friends-list-item__support-wrap')
-        if support_wrap:
-            support_id = support_wrap[0].find_all('a')[0].get('href')
-            support_id = support_id.split('/')[-1]
-
-        support_limit = None
-        support_limit_wrap = friend.find_all(class_='-r-uma-musume-friends-list-item__limitNumber')
-        if support_limit_wrap:
-            support_limit = support_limit_wrap[0].text.strip()
-
-        trainer_id = None
-        trainer_id_wrap = friend.find_all(class_='-r-uma-musume-friends-list-item__trainerId__text')
-        if trainer_id_wrap:
-            trainer_id = trainer_id_wrap[0].text.strip()
-
-        main_uma_img = None
-        main_uma_wrap = friend.find_all(class_='-r-uma-musume-friends-list-item__mainUmaMusume-wrap')
-        if main_uma_wrap:
-            main_uma_img = main_uma_wrap[0].img.get('src').strip()
-
-        factors = None
-        factors_item = friend.find_all(class_='-r-uma-musume-friends-list-item__factor-list__item')
-        if factors_item:
-            factors = [factor.text.strip() for factor in factors_item]
-
-        comment = None
-        comment_wrap = friend.find_all(class_='-r-uma-musume-friends-list-item__comment')
-        if comment_wrap:
-            comment = comment_wrap[0].text.strip()
-
-        post_date = None
-        post_date_wrap = friend.find_all(class_='-r-uma-musume-friends-list-item__postDate')
-        if post_date_wrap:
-            post_date = post_date_wrap[0].text.strip()
-            post_date = get_utc_datetime(post_date)
-
-        entry = {
-            'friend_code': trainer_id,
-            'support_id': support_id,
-            'support_limit': support_limit,
-            'character_image_url': main_uma_img,
-            'factors': factors,
-            'comment': comment,
-        }
-        hash_digest = hash_object(entry)
-        entry['post_date'] = post_date
-        entry['hash_digest'] = hash_digest
-
+    for friend_page in friends_page_list:
+        entry = get_friend_data(friend_page)
         friends.append(entry)
 
     return friends
@@ -326,13 +329,9 @@ if __name__ == '__main__':
     friends = get_friends(friends_page_list=parsed_list)
     logger.info(message_with_json('Fetched friends on page to insert.', {'count': len(friends)}))
 
-    mongo_client = MongoClient(UMAFRIENDS_DB_URI)
+    mongo_client = MongoClient(UMAFRIENDS_DB_URI, tz_aware=True)
     raw_db = mongo_client[UMAFRIENDS_DB]
     raw_friends = raw_db[RAW_GAMEWITH_FRIENDS_NS]
-    raw_friends.create_index(
-        [('friend_code', ASCENDING), ('hash_digest', ASCENDING)],
-        unique=True
-    )
 
     message = message_with_json('Insert into database.',
                                 {'uri': CENSORED_UMAFRIENDS_DB_URI, 'database': UMAFRIENDS_DB, 'collection': RAW_GAMEWITH_FRIENDS_NS})
@@ -351,3 +350,8 @@ if __name__ == '__main__':
             raise e
     else:
         logger.info(message_with_json('Insert finished.', {'nInserted': len(insert_result.inserted_ids)}))
+
+    raw_friends.create_index(
+        [('hash_digest', ASCENDING), ('post_date', ASCENDING)],
+        unique=True
+    )
