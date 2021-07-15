@@ -1,3 +1,4 @@
+import json
 import logging
 
 from bs4 import BeautifulSoup
@@ -23,33 +24,16 @@ class GamewithScraper:
         self.url = url
         self.timeout = timeout
         self.raw_collection = raw_collection
+        logger.info('Finished initializing GamewithScraper.')
 
     def run(self):
         '''Starts scraping and storing data.'''
+        logger.info('Started running GamewithScraper.')
         raw_friends_html = self._scrape_raw()
-        if raw_friends_html is None:
-            logger.error()
-            # raise exception: can't scrape friend section
-            pass
-
         friend_html_list = self._parse_friend_html_list(raw_friends_html)
-        if not friend_html_list:
-            logger.error()
-            # raise exception: can't fetch friend html list
-            pass
-
         friends_data = self._get_friends_data(friend_html_list)
         self._insert_into_raw_database(friends_data)
-
-    def _scrape_raw(self):
-        '''Connects to url, scrapes the page, and finds friends section.
-
-        Returns:
-            None, if couldn't find friends section;
-            HTML of the friends section web element, otherwise.
-        '''
-        raw_friends_html = None
-        return raw_friends_html
+        logger.info('Finished running GamewithScraper.')
 
     def _parse_friend_html_list(self, raw_friends_html):
         '''Parse friends section html and find list of friend html.
@@ -61,8 +45,15 @@ class GamewithScraper:
         Returns:
             List of <li> elements.
         '''
+        logger.info('Started parsing friend html list.')
         soup = BeautifulSoup(raw_friends_html, 'lxml')
         friend_html_list = soup.find_all(class_='-r-uma-musume-friends-list-item')
+
+        if not friend_html_list:
+            logger.error('Failed to parse friend html list.')
+            logger.debug(json.dumps({'soup': soup}, ensure_ascii=False))
+            # TODO: raise exception
+        logger.info('Finished parsing friend html list.')
         return friend_html_list
 
     def _get_friends_data(self, friend_html_list):
@@ -75,10 +66,12 @@ class GamewithScraper:
         Returns:
             List of dicts consisting of friends data.
         '''
+        logger.info('Started extracting friends data.')
         friends_data = []
         for friend_html in friend_html_list:
             friend_data = self._get_friend_data(friend_html)
             friends_data.append(friend_data)
+        logger.info('Finished extracting friends data.')
         return friends_data
 
     def _get_friend_data(self, friend_html):
@@ -114,6 +107,8 @@ class GamewithScraper:
              Values may be None if corresponding data isn't found.
         '''
         friend_data = {}
+        # TODO: get data
+
         return friend_data
 
     def _insert_into_raw_database(self, friends_data):
@@ -127,4 +122,23 @@ class GamewithScraper:
             All exceptions raised by MongoClient,
             except for DuplicateKeyError.
         '''
-        pass
+        logger.info('Started inserting friends data into raw database')
+        # TODO: insert
+
+        logger.info('Finished inserting friends data into raw database')
+
+    def _scrape_raw(self):
+        '''Connects to url, scrapes the page, and finds friends section.
+
+        Returns:
+            HTML of the friends section web element.
+        '''
+        logger.info('Started scraping friends section.')
+        raw_friends_html = None
+        # TODO: scrape
+
+        if raw_friends_html is None:
+            logger.error('Failed to scrape friends section.')
+            # TODO: raise exception
+        logger.info('Finished scraping friends section.')
+        return raw_friends_html
