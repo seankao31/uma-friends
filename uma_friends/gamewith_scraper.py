@@ -3,6 +3,8 @@ import logging
 
 from bs4 import BeautifulSoup
 
+from .utils import get_utc_datetime, hash_object
+
 
 logger = logging.getLogger(__name__)
 
@@ -21,9 +23,9 @@ class GamewithScraper:
             A pymongo Collection.
     '''
     def __init__(self, url, timeout, raw_collection):
-        self.url = url
-        self.timeout = timeout
-        self.raw_collection = raw_collection
+        self._url = url
+        self._timeout = timeout
+        self._raw_collection = raw_collection
         logger.info('Finished initializing GamewithScraper.')
 
     def run(self):
@@ -106,8 +108,55 @@ class GamewithScraper:
 
              Values may be None if corresponding data isn't found.
         '''
-        friend_data = {}
-        # TODO: get data
+        support_id = None
+        support_wrap = friend_html.find_all(class_='-r-uma-musume-friends-list-item__support-wrap')
+        if support_wrap:
+            # Example href: 'https://gamewith.jp/uma-musume/article/show/262813'
+            support_id = support_wrap[0].find_all('a')[0].get('href')
+            support_id = support_id.split('/')[-1]
+
+        support_limit = None
+        support_limit_wrap = friend_html.find_all(class_='-r-uma-musume-friends-list-item__limitNumber')
+        if support_limit_wrap:
+            support_limit = support_limit_wrap[0].text.strip()
+
+        trainer_id = None
+        trainer_id_wrap = friend_html.find_all(class_='-r-uma-musume-friends-list-item__trainerId__text')
+        if trainer_id_wrap:
+            trainer_id = trainer_id_wrap[0].text.strip()
+
+        main_uma_img = None
+        main_uma_wrap = friend_html.find_all(class_='-r-uma-musume-friends-list-item__mainUmaMusume-wrap')
+        if main_uma_wrap:
+            main_uma_img = main_uma_wrap[0].img.get('src').strip()
+
+        factors = None
+        factors_item = friend_html.find_all(class_='-r-uma-musume-friends-list-item__factor-list__item')
+        if factors_item:
+            factors = [factor.text.strip() for factor in factors_item]
+
+        comment = None
+        comment_wrap = friend_html.find_all(class_='-r-uma-musume-friends-list-item__comment')
+        if comment_wrap:
+            comment = comment_wrap[0].text.strip()
+
+        post_date = None
+        post_date_wrap = friend_html.find_all(class_='-r-uma-musume-friends-list-item__postDate')
+        if post_date_wrap:
+            post_date = post_date_wrap[0].text.strip()
+            post_date = get_utc_datetime(post_date, '%m/%d %H:%M')
+
+        friend_data = {
+            'friend_code': trainer_id,
+            'support_id': support_id,
+            'support_limit': support_limit,
+            'character_image_url': main_uma_img,
+            'factors': factors,
+            'comment': comment,
+        }
+        hash_digest = hash_object(friend_data)
+        friend_data['post_date'] = post_date
+        friend_data['hash_digest'] = hash_digest
 
         return friend_data
 
