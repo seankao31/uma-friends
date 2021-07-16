@@ -188,6 +188,8 @@ class GamewithScraper:
         '''
         logger.info('Started inserting friends data into raw database')
         # TODO: insert
+        print("INSERT INTO RAW DATABASE.")
+        print(friends_data)
 
         logger.info('Finished inserting friends data into raw database')
 

@@ -44,7 +44,7 @@ def hash_object(obj):
 
 
 def get_logger():
-    logger = logging.getLogger(__name__)
+    logger = logging.getLogger('uma_friends')
     logger.setLevel(logging.DEBUG)
     console_handler = logging.StreamHandler()
     console_handler.setLevel(logging.DEBUG)
