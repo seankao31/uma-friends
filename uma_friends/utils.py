@@ -1,6 +1,7 @@
 from datetime import datetime, timezone
 import hashlib
 import json
+import logging
 
 
 def get_utc_datetime(date_string, format):
@@ -40,3 +41,15 @@ def hash_object(obj):
                             ensure_ascii=True,
                             indent=None)
     return hashlib.sha1(object_str.encode('utf-8')).hexdigest()
+
+
+def get_logger():
+    logger = logging.getLogger(__name__)
+    logger.setLevel(logging.DEBUG)
+    console_handler = logging.StreamHandler()
+    console_handler.setLevel(logging.DEBUG)
+    formatter = logging.Formatter('%(levelname)s [%(name)s.%(funcName)s:%(lineno)d] %(message)s')
+    console_handler.setFormatter(formatter)
+    logger.addHandler(console_handler)
+
+    return logger
