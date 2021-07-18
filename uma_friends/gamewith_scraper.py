@@ -5,6 +5,8 @@ import time
 
 from bs4 import BeautifulSoup
 from selenium.common.exceptions import NoSuchElementException
+from pymongo import ASCENDING
+from pymongo.errors import BulkWriteError
 
 from .utils import get_utc_datetime, hash_object
 
@@ -12,29 +14,33 @@ from .utils import get_utc_datetime, hash_object
 logger = logging.getLogger(__name__)
 
 
+DUPLICATE_KEY_ERROR_CODE = 11000
+
+
 class PageError(Exception):
     pass
 
 
 class GamewithScraper:
-    '''A web scraper that fetches friend data from gamewith website.
-
-    Attributes:
-        _driver:
-            A selenium webdriver.
-        _URL:
-            A string of url link to the gamewith uma musume
-            friends sharing page.
-        _TIMEOUT:
-            An integer indicating in seconds how long the scraper
-            should keep trying to access some web elements.
-        _BUTTON_LIMIT:
-            An integer of how many times at most should the
-            "もっと見る" button be clicked.
-        _raw_collection:
-            A pymongo Collection.
-    '''
+    '''A web scraper that fetches friend data from gamewith website.'''
     def __init__(self, driver, url, timeout, button_limit, raw_collection):
+        '''Initializes GamewithScraper.
+
+        Args:
+            driver:
+                A selenium webdriver.
+            URL:
+                A string of url link to the gamewith uma musume
+                friends sharing page.
+            TIMEOUT:
+                An integer indicating in seconds how long the scraper
+                should keep trying to access some web elements.
+            BUTTON_LIMIT:
+                An integer of how many times at most should the
+                "もっと見る" button be clicked.
+            raw_collection:
+                A pymongo Collection.
+        '''
         self._driver = driver
         self._URL = url
         self._TIMEOUT = timeout
@@ -43,7 +49,7 @@ class GamewithScraper:
         logger.info('Finished initializing GamewithScraper.')
 
     def run(self):
-        '''Starts scraping and storing data.'''
+        '''Scrapes and stores data.'''
         logger.info('Started running GamewithScraper.')
         raw_friends_html = self._scrape_raw()
         friend_html_list = self._parse_friend_html_list(raw_friends_html)
@@ -186,12 +192,34 @@ class GamewithScraper:
             All exceptions raised by MongoClient,
             except for DuplicateKeyError.
         '''
-        logger.info('Started inserting friends data into raw database')
-        # TODO: insert
-        print("INSERT INTO RAW DATABASE.")
-        print(friends_data)
+        logger.info('Started inserting friends data into raw database. %s',
+                    json.dumps({'collection': self._raw_collection.full_name}))
+        try:
+            insert_result = self._raw_collection.insert_many(friends_data, ordered=False)
+        except BulkWriteError as e:
+            # Ignore DuplicateKeyError
+            n_error = len(e.details['writeErrors'])
+            panic_list = [e_ for e_ in e.details['writeErrors']
+                          if e_['code'] != DUPLICATE_KEY_ERROR_CODE]
+            e.details['writeErrors'] = panic_list
+            logger.info('Ignored duplications. %s',
+                        json.dumps({'n_duplicate': n_error - len(panic_list)}))
+            logger.info('Finished inserting friends data into raw database. %s',
+                        json.dumps({'collection': self._raw_collection.full_name,
+                                    'n_inserted': e.details['nInserted']}))
+            if panic_list:
+                logger.exception('Exception occurred during insertion.',
+                                 exc_info=e, stack_info=True)
+        else:
+            logger.info('Finished inserting friends data into raw database. %s',
+                        json.dumps({'collection': self._raw_collection.full_name,
+                                    'n_inserted': len(insert_result.inserted_ids)}))
 
-        logger.info('Finished inserting friends data into raw database')
+        self._raw_collection.create_index(
+            [('hash_digest', ASCENDING), ('post_date', ASCENDING)],
+            unique=True
+        )
+        logger.info('Finsihed creating index in raw database.')
 
     def _connect_to_page(self):
         '''Webdriver connects to page.'''
