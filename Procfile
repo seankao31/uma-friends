@@ -1,1 +1,1 @@
-worker: python scrape_friends_gamewith.py
+scrape_friend: python run_scraper.py

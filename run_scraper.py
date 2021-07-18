@@ -22,7 +22,7 @@ RAW_GAMEWITH_FRIENDS_NS = os.environ['RAW_GAMEWITH_FRIENDS_NS']
 GAMEWITH_FRIENDS_URL = os.environ['GAMEWITH_FRIENDS_URL']
 
 
-def run():
+def run_scraper():
     chrome_option = webdriver.ChromeOptions()
     chrome_option.binary_location = GOOGLE_CHROME_BIN
     chrome_option.add_argument('--headless')
@@ -43,4 +43,4 @@ def run():
 
 
 if __name__ == '__main__':
-    run()
+    run_scraper()
