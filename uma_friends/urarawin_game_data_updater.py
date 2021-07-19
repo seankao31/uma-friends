@@ -1,7 +1,8 @@
 import json
 import logging
-from bs4 import BeautifulSoup
 
+from bs4 import BeautifulSoup
+from pymongo import ASCENDING
 import requests
 
 
@@ -129,3 +130,7 @@ class UrarawinGameDataUpdater:
             collection.insert_many(documents)
             logger.info('Finished inserting data into collection. %s',
                         json.dumps({'collection': collection.full_name}))
+
+        self._game_data_database['skills'].create_index('name', ASCENDING)
+        self._game_data_database['players'].create_index('skillList', ASCENDING)
+        logger.info('Finsihed creating index in game database.')
