@@ -87,7 +87,9 @@ class GamewithNormalizer:
 
         support = {}
         if friend_data['support_id'] is not None:
-            support['id'] = friend_data['support_id']
+            # friend_data['support_id'] is the id defined in gamewith, not in our game database from urarawin
+            support_id = self._find_support_id_by_gamewith_id(friend_data['support_id'])
+            support['id'] = support_id
         if friend_data['support_limit'] is not None:
             # Take only the number part
             support['limit'] = friend_data['support_limit'][0]
@@ -119,6 +121,23 @@ class GamewithNormalizer:
         friend['parents'] = parents
 
         return friend
+
+    def _find_support_id_by_gamewith_id(self, gw_id):
+        '''Returns support id corresponding to gamewith id.
+
+        Args:
+            gw_id: A string of gamewith id.
+
+        Raises:
+            OutdatedError, if not found.
+        '''
+        support = self._game_data_database['supports'].find_one(
+            {'gwId': gw_id},
+            {'_id': 0, 'id': 1}
+        )
+        if support is None:
+            raise OutdatedError('Cannot find support in database.')
+        return support['id']
 
     def _find_uma_id_by_image_url(self, image_url):
         '''Returns uma id corresponding to image url.

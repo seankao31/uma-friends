@@ -254,8 +254,8 @@ class GamewithScraper:
             try:
                 cleaned_data = self._gamewith_normalizer.normalize(friend_data)
             except OutdatedError as e:
-                logger.exception('Cannot find uma with image url. %s',
-                                 json.dumps({'image_url': friend_data['character_image_url']}),
+                logger.exception('Game database outdated. Lookup in game database failed. %s',
+                                 json.dumps({'friend_data': friend_data}),
                                  exc_info=e,
                                  stack_info=True)
                 failed_data_list.append(friend_data)

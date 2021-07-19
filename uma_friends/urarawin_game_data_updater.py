@@ -132,4 +132,5 @@ class UrarawinGameDataUpdater:
 
         self._game_data_database['skills'].create_index('name')
         self._game_data_database['players'].create_index('uniqueSkillList')
+        self._game_data_database['supports'].create_index('gwId')
         logger.info('Finsihed creating index in game database.')
