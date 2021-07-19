@@ -1,6 +1,4 @@
 from datetime import datetime, timezone
-import hashlib
-import json
 import logging
 
 
@@ -27,20 +25,6 @@ def get_utc_datetime(date_string, format):
 
     post_date_utc = post_date_local.astimezone(tz=timezone.utc)
     return post_date_utc
-
-
-def hash_object(obj):
-    '''Returns sha1 hash of object. Attempts formalizing object before hashing.
-
-    Args:
-        obj: A dict to be hashed. All values should be serializable.
-    '''
-    object_str = json.dumps(obj,
-                            sort_keys=True,
-                            separators=(',', ':'),
-                            ensure_ascii=True,
-                            indent=None)
-    return hashlib.sha1(object_str.encode('utf-8')).hexdigest()
 
 
 def get_logger():

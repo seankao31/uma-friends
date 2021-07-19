@@ -23,7 +23,6 @@ Example friend data from gamewith:
 }
 '''
 import copy
-import json
 import logging
 
 
@@ -68,6 +67,15 @@ class GamewithNormalizer:
         }
 
     def normalize(self, friend_data):
+        '''Return normalized friend data.
+
+        Args:
+            friend_data:
+                A dict consisting of raw friend data.
+
+        Raises:
+            OutdatedError, if look up in game database fails.
+        '''
         friend = {}
 
         friend['friend_code'] = friend_data['friend_code']
@@ -91,15 +99,7 @@ class GamewithNormalizer:
             return friend
 
         main_uma = {}
-        try:
-            main_uma_id = self._find_uma_id_by_image_url(friend_data['character_image_url'])
-        except OutdatedError as e:
-            logger.exception('Cannot find uma with image url. %s',
-                             json.dumps({'image_url': friend_data['character_image_url']}),
-                             esc_info=e,
-                             stack_info=True)
-            # TODO: insert into a FAILED_BUFFER database for future update
-            return
+        main_uma_id = self._find_uma_id_by_image_url(friend_data['character_image_url'])
         main_uma['id'] = main_uma_id
 
         if friend_data['factors'] is None:
