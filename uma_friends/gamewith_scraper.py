@@ -8,7 +8,8 @@ from selenium.common.exceptions import NoSuchElementException
 from pymongo import ASCENDING
 from pymongo.errors import BulkWriteError
 
-from .utils import get_utc_datetime, hash_object
+from .gamewith_normalizer import OutdatedError
+from .utils import get_utc_datetime
 
 
 logger = logging.getLogger(__name__)
@@ -23,7 +24,8 @@ class PageError(Exception):
 
 class GamewithScraper:
     '''A web scraper that fetches friend data from gamewith website.'''
-    def __init__(self, driver, url, timeout, button_limit, raw_collection):
+    def __init__(self, driver, url, timeout, button_limit, raw_collection,
+                 clean_collection, failed_collection, gamewith_normalizer):
         '''Initializes GamewithScraper.
 
         Args:
@@ -39,13 +41,22 @@ class GamewithScraper:
                 An integer of how many times at most should the
                 "もっと見る" button be clicked.
             raw_collection:
-                A pymongo Collection.
+                A pymongo Collection. Stores raw data scraped from gamewith.
+            clean_collection:
+                A pymongo Collection. Stores clean-up data.
+            failed_collection:
+                A pymongo Collection. Stores friend data that cannot be normalized.
+            gamewith_normalizer:
+                A GamewithNormalizer. Parses raw gamewith data.
         '''
         self._driver = driver
         self._URL = url
         self._TIMEOUT = timeout
         self._BUTTON_LIMIT = button_limit
         self._raw_collection = raw_collection
+        self._clean_collection = clean_collection
+        self._failed_collection = failed_collection
+        self._gamewith_normalizer = gamewith_normalizer
         logger.info('Finished initializing GamewithScraper.')
 
     def run(self):
@@ -55,6 +66,7 @@ class GamewithScraper:
         friend_html_list = self._parse_friend_html_list(raw_friends_html)
         friends_data = self._get_friends_data(friend_html_list)
         self._insert_into_raw_database(friends_data)
+        self._clean_and_store_data(friends_data)
         logger.info('Finished running GamewithScraper.')
 
     def _parse_friend_html_list(self, raw_friends_html):
@@ -124,8 +136,8 @@ class GamewithScraper:
                  'URAシナリオ6(代表3)'
              ],
              'comment': 'スタミナ6\nパワー3\nマイル4\n差し2\nURA5\n\nキャンサー杯用に良かったら使って下さい。\n白因子省略\n代表URA☆3\n親2URA☆2'
-             'post_date': ISODate('2021-07-15T10:09:00Z'),
-             'hash_digest': '5da3e135f5239bfd630fa36495ffb752161da5c2'}
+             'post_date': ISODate('2021-07-15T10:09:00Z')}
+
 
              Values may be None if corresponding data isn't found.
         '''
@@ -150,6 +162,8 @@ class GamewithScraper:
         main_uma_wrap = friend_html.find_all(class_='-r-uma-musume-friends-list-item__mainUmaMusume-wrap')
         if main_uma_wrap:
             main_uma_img = main_uma_wrap[0].img.get('src').strip()
+            if main_uma_img == 'https://img.gamewith.jp/article_tools/uma-musume/gacha/i_undefined.png':
+                main_uma_img = None
 
         factors = None
         factors_item = friend_html.find_all(class_='-r-uma-musume-friends-list-item__factor-list__item')
@@ -175,9 +189,7 @@ class GamewithScraper:
             'factors': factors,
             'comment': comment,
         }
-        hash_digest = hash_object(friend_data)
         friend_data['post_date'] = post_date
-        friend_data['hash_digest'] = hash_digest
 
         return friend_data
 
@@ -210,16 +222,113 @@ class GamewithScraper:
             if panic_list:
                 logger.exception('Exception occurred during insertion.',
                                  exc_info=e, stack_info=True)
+                raise e
         else:
             logger.info('Finished inserting friends data into raw database. %s',
                         json.dumps({'collection': self._raw_collection.full_name,
                                     'n_inserted': len(insert_result.inserted_ids)}))
 
         self._raw_collection.create_index(
-            [('hash_digest', ASCENDING), ('post_date', ASCENDING)],
+            [('friend_code', ASCENDING), ('post_date', ASCENDING)],
             unique=True
         )
         logger.info('Finsihed creating index in raw database.')
+
+    def _clean_and_store_data(self, friends_data):
+        '''Parse raw friends data and store in cleanup database.
+
+        Args:
+            friends_data:
+                List of dicts consisting of friends data.
+        '''
+        logger.info('Started cleaning friends data.')
+
+        # Attempts to normalize all friends data
+
+        # Stores normalized friend data
+        cleaned_data_list = []
+        # Stores friend data (in original form) which failed to be normalize
+        failed_data_list = []
+
+        for friend_data in friends_data:
+            try:
+                cleaned_data = self._gamewith_normalizer.normalize(friend_data)
+            except OutdatedError as e:
+                logger.exception('Game database outdated. Lookup in game database failed. %s',
+                                 json.dumps({'friend_data': friend_data}),
+                                 exc_info=e,
+                                 stack_info=True)
+                failed_data_list.append(friend_data)
+                continue
+            except Exception as e:
+                logger.exception('Something went wrong during normalizing friend data. %s',
+                                 json.dumps({'friend_data': friend_data}),
+                                 exc_info=e,
+                                 stack_info=True)
+                failed_data_list.append(friend_data)
+                continue
+            cleaned_data_list.append(cleaned_data)
+
+        # Insert cleaned data into clean database
+        if cleaned_data_list:
+            logger.info('Started inserting cleaned data into clean database. %s',
+                        json.dumps({'collection': self._clean_collection.full_name}))
+            try:
+                insert_result = self._clean_collection.insert_many(cleaned_data_list, ordered=False)
+            except BulkWriteError as e:
+                # Ignore DuplicateKeyError
+                n_error = len(e.details['writeErrors'])
+                panic_list = [e_ for e_ in e.details['writeErrors']
+                              if e_['code'] != DUPLICATE_KEY_ERROR_CODE]
+                e.details['writeErrors'] = panic_list
+                logger.info('Ignored duplications. %s',
+                            json.dumps({'n_duplicate': n_error - len(panic_list)}))
+                logger.info('Finished inserting cleaned data into clean database. %s',
+                            json.dumps({'collection': self._clean_collection.full_name,
+                                        'n_inserted': e.details['nInserted']}))
+                if panic_list:
+                    logger.exception('Exception occurred during insertion.',
+                                     exc_info=e, stack_info=True)
+                    raise e
+            else:
+                logger.info('Finished inserting cleaned data into clean database. %s',
+                            json.dumps({'collection': self._clean_collection.full_name,
+                                        'n_inserted': len(insert_result.inserted_ids)}))
+            self._clean_collection.create_index(
+                [('friend_code', ASCENDING), ('post_date', ASCENDING)],
+                unique=True
+            )
+
+        # Insert failed-to-normalize data into failed database
+        if failed_data_list:
+            logger.info('Started inserting failed data into failed database. %s',
+                        json.dumps({'collection': self._failed_collection.full_name}))
+            try:
+                insert_result = self._failed_collection.insert_many(failed_data_list)
+            except BulkWriteError as e:
+                # Ignore DuplicateKeyError
+                n_error = len(e.details['writeErrors'])
+                panic_list = [e_ for e_ in e.details['writeErrors']
+                              if e_['code'] != DUPLICATE_KEY_ERROR_CODE]
+                e.details['writeErrors'] = panic_list
+                logger.info('Ignored duplications. %s',
+                            json.dumps({'n_duplicate': n_error - len(panic_list)}))
+                logger.info('Finished inserting failed data into failed database. %s',
+                            json.dumps({'collection': self._failed_collection.full_name,
+                                        'n_inserted': e.details['nInserted']}))
+                if panic_list:
+                    logger.exception('Exception occurred during insertion.',
+                                     exc_info=e, stack_info=True)
+                    raise e
+            else:
+                logger.info('Finished inserting failed data into failed database. %s',
+                            json.dumps({'collection': self._failed_collection.full_name,
+                                        'n_inserted': len(insert_result.inserted_ids)}))
+            self._failed_collection.create_index(
+                [('friend_code', ASCENDING), ('post_date', ASCENDING)],
+                unique=True
+            )
+        logger.info('Finished cleaning friends data.')
 
     def _connect_to_page(self):
         '''Webdriver connects to page.'''
@@ -289,15 +398,15 @@ class GamewithScraper:
         friend_html = BeautifulSoup(raw_friend_html, 'lxml')
         friend_data = self._get_friend_data(friend_html)
 
-        hash_digest = friend_data['hash_digest']
+        friend_code = friend_data['friend_code']
         post_date = friend_data['post_date']
-        query = {'hash_digest': hash_digest, 'post_date': post_date}
+        query = {'friend_code': friend_code, 'post_date': post_date}
         matched_document = self._raw_collection.find_one(query)
 
         if matched_document is None:
             return False
         logger.info('Found duplicate friend data. %s',
-                    json.dumps({'hash_digest': hash_digest, 'post_date': str(post_date)}))
+                    json.dumps({'friend_code': friend_code, 'post_date': str(post_date)}))
         return True
 
     def _click_more_friends_button(self):
