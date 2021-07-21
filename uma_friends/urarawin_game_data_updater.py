@@ -106,8 +106,16 @@ class UrarawinGameDataUpdater:
             url = self._uma_article_base_url + gamewith_id
             response = requests.get(url)
             soup = BeautifulSoup(response.text, 'lxml')
-            a = soup.find('a', href=url)
-            gwImgUrl = a.img['data-original']
+            uma_joubu = soup.find(class_='uma_joubu')
+            a = uma_joubu.find('a', href=url)
+            try:
+                gwImgUrl = a.img['data-original']
+            except TypeError as e:
+                logger.exception('Cannot find image url. %s',
+                                 json.dumps({'gamewith_id': gamewith_id, 'url': url}),
+                                 exc_info=e,
+                                 stack_info=True)
+                raise e
             uma['gwImgUrl'] = gwImgUrl
 
         logger.info('Finished preprocessing game data.')
