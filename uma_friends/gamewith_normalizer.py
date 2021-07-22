@@ -92,7 +92,7 @@ class GamewithNormalizer:
             support['id'] = support_id
         if friend_data['support_limit'] is not None:
             # Take only the number part
-            support['limit'] = friend_data['support_limit'][0]
+            support['limit'] = int(friend_data['support_limit'][0])
         if not support:
             support = None
         friend['support'] = support
