@@ -62,12 +62,36 @@ class GamewithScraper:
     def run(self):
         '''Scrapes and stores data.'''
         logger.info('Started running GamewithScraper.')
+        self._fix_failed_data()
         raw_friends_html = self._scrape_raw()
         friend_html_list = self._parse_friend_html_list(raw_friends_html)
         friends_data = self._get_friends_data(friend_html_list)
         self._insert_into_raw_database(friends_data)
-        self._clean_and_store_data(friends_data)
+        cleaned_data_list, failed_data_list = self._clean_data(friends_data)
+        self._insert_into_clean_database(cleaned_data_list)
+        self._insert_into_failed_database(failed_data_list)
         logger.info('Finished running GamewithScraper.')
+
+    def _fix_failed_data(self):
+        '''Attempts to fix friend data previously failed cleaning.'''
+        logger.info('Started fixing failed data.')
+        failed_friends_data = list(self._failed_collection.find())
+        try:
+            self._failed_collection.drop()
+            logger.info('Dropped failed database. %s',
+                        json.dumps({'collection': self._failed_collection.full_name}))
+            cleaned_data_list, failed_data_list = self._clean_data(failed_friends_data)
+            self._insert_into_clean_database(cleaned_data_list)
+            self._insert_into_failed_database(failed_data_list)
+        except:
+            # Stopped cleaning failed data prematurely.
+            # Insert failed data back into failed database (we just dropped it)
+            # before raising the same exception again.
+            self._insert_into_failed_database(failed_friends_data)
+            logger.exception('Failed fixing failed data. Inserted failed data back into failed database. %s',
+                             json.dumps({'collection': self._failed_collection.full_name}))
+            raise
+        logger.info('Finished fixing failed data.')
 
     def _parse_friend_html_list(self, raw_friends_html):
         '''Parse friends section html and find list of friend html.
@@ -234,16 +258,19 @@ class GamewithScraper:
         )
         logger.info('Finsihed creating index in raw database.')
 
-    def _clean_and_store_data(self, friends_data):
-        '''Parse raw friends data and store in cleanup database.
+    def _clean_data(self, friends_data):
+        '''Parse raw friends data.
 
         Args:
             friends_data:
                 List of dicts consisting of friends data.
+
+        Returns:
+            (cleaned_data_list, failed_data_list)
+            cleaned_data_list: data that are parsed successfully.
+            failed_data_list: otherwise.
         '''
         logger.info('Started cleaning friends data.')
-
-        # Attempts to normalize all friends data
 
         # Stores normalized friend data
         cleaned_data_list = []
@@ -254,22 +281,42 @@ class GamewithScraper:
             try:
                 cleaned_data = self._gamewith_normalizer.normalize(friend_data)
             except OutdatedError as e:
+                friend_data_identify = {
+                    'friend_code': friend_data['friend_code'],
+                    'post_date': str(friend_data['post_date'])
+                }
                 logger.exception('Game database outdated. Lookup in game database failed. %s',
-                                 json.dumps({'friend_data': friend_data}),
+                                 json.dumps({'friend_data': friend_data_identify}, ensure_ascii=False),
                                  exc_info=e,
                                  stack_info=True)
                 failed_data_list.append(friend_data)
                 continue
             except Exception as e:
+                friend_data_identify = {
+                    'friend_code': friend_data['friend_code'],
+                    'post_date': str(friend_data['post_date'])
+                }
                 logger.exception('Something went wrong during normalizing friend data. %s',
-                                 json.dumps({'friend_data': friend_data}),
+                                 json.dumps({'friend_data': friend_data_identify}, ensure_ascii=False),
                                  exc_info=e,
                                  stack_info=True)
                 failed_data_list.append(friend_data)
                 continue
             cleaned_data_list.append(cleaned_data)
 
-        # Insert cleaned data into clean database
+        logger.info('Finished cleaning friends data.')
+        return cleaned_data_list, failed_data_list
+
+    def _insert_into_clean_database(self, cleaned_data_list):
+        '''Insert cleaned data into clean database.
+
+        Args:
+            cleaned_data_list: List of parsed friends data.
+
+        Raises:
+            All exceptions raised by MongoClient,
+            except for DuplicateKeyError.
+        '''
         if cleaned_data_list:
             logger.info('Started inserting cleaned data into clean database. %s',
                         json.dumps({'collection': self._clean_collection.full_name}))
@@ -299,7 +346,16 @@ class GamewithScraper:
                 unique=True
             )
 
-        # Insert failed-to-normalize data into failed database
+    def _insert_into_failed_database(self, failed_data_list):
+        '''Insert cleaned data into failed database.
+
+        Args:
+            failed_data_list: List of friends data that can't be parsed.
+
+        Raises:
+            All exceptions raised by MongoClient,
+            except for DuplicateKeyError.
+        '''
         if failed_data_list:
             logger.info('Started inserting failed data into failed database. %s',
                         json.dumps({'collection': self._failed_collection.full_name}))
@@ -328,7 +384,6 @@ class GamewithScraper:
                 [('friend_code', ASCENDING), ('post_date', ASCENDING)],
                 unique=True
             )
-        logger.info('Finished cleaning friends data.')
 
     def _connect_to_page(self):
         '''Webdriver connects to page.'''
