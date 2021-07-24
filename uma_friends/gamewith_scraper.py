@@ -345,6 +345,21 @@ class GamewithScraper:
                 [('friend_code', ASCENDING), ('post_date', ASCENDING)],
                 unique=True
             )
+            self._clean_collection.create_index([('main_uma.id', ASCENDING), ('support.id', ASCENDING)])
+            self._clean_collection.create_index([
+                ('main_uma.factors.name', ASCENDING),
+                ('main_uma.factors.type', ASCENDING),
+                ('main_uma.factors.level', ASCENDING),
+                ('main_uma.id', ASCENDING),
+                ('support.id', ASCENDING)
+            ])
+            self._clean_collection.create_index([
+                ('factors.name', ASCENDING),
+                ('factors.type', ASCENDING),
+                ('factors.level', ASCENDING),
+                ('main_uma.id', ASCENDING),
+                ('support.id', ASCENDING)
+            ])
 
     def _insert_into_failed_database(self, failed_data_list):
         '''Insert cleaned data into failed database.
